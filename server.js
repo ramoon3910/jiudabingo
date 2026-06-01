@@ -1,44 +1,54 @@
 const express = require('express');
-const app = report = express();
+const app = express();
 const http = require('http').createServer(app);
 const io = require('socket.io')(http);
 const PORT = process.env.PORT || 3000;
 
 app.use(express.static(__dirname));
 
-// 1~25號 題目資料庫
-const bingoDatabase = {};
-for (let i = 1; i <= 25; i++) {
-    bingoDatabase[i] = {
-        1: `【點1】任務：整租一致进行三叩首`,
-        2: `【點2】任務：一起朗诵开经集（薪火品)`,
-        3: `【點3】任務：解释是五条佛规的第八条`,
-        4: `【點4】任務：摆盘供果的分别：三人式和五人式的分别`,
-        5: `【點5】任務：解释成功五大要素，一人一个`,
-        6: `【點6】任務：道七步天梯: 求道, 學道, __(三)__, __(四)__, __(五)__. `,
-        7: `【點7】任務："成功之五大條件: 遠見, 果斷, 握機, 認真 and 持恆. 用一張照片表達每個成功條件的意思. （可以是生活場景或創意達）"`,
-        8: `【點8】任務：每个人说出引师和保师的名字、法号`,
-        9: `【點9】任務：以（道）来做出5组两个字的造句，比如：道心`,
-        10: `【點10】任務：进来佛堂后会做的3件事情`,
-        11: `【點11】任務：和团队一起自拍比爱心照片，线下：每个人的手一起组大爱心、线上：每个人的手构图成大爱心`,
-        12: `【點12】任務：菩薩八覺有哪八覺`,
-        13: `【點13】任務：我們開始獻香前要先請示誰`,
-        14: `【點14】任務：獻香哪一個仙佛的名字有重複`,
-        15: `【點15】任務：請問九蓮聖經目前出到第幾品`,
-        16: `【點16】任務：一人說兩個平日獻香的佛號(要接下去）`,
-        17: `【點17】任務：獻早香的時候，草香的順序`,
-        18: `【點18】任務：每人说一个道场称谓。`,
-        19: `【點19】任務：每人說兩個道場中，最常用到的詞。（比如說"感謝慈悲“）`,
-        20: `【點20】任務：每人説一個佛規`,
-        21: `// ... 題目保持不變 ...`,
-        25: `【點25】任務：閉上眼睛深呼吸 3 秒！`
-    };
+// 原始 25 道題目池
+const rawTasks = {
+    1: "任務：整租一致进行三叩首",
+    2: "任務：一起朗诵开经集（薪火品)",
+    3: "任務：解释是五条佛规的第八条",
+    4: "任務：摆盘供果的分别：三人式和五人式的分别",
+    5: "任務：解释成功五大要素，一人一个",
+    6: "任務：道七步天梯: 求道, 學道, __(三)__, __(四)__, __(五)__. ",
+    7: "任務：\"成功之五大條件: 遠見, 果斷, 握機, 認真 and 持恆. 用一張照片表達每個成功條件的意思. （可以是生活場景或創意達）\"",
+    8: "任務：每个人说出引师和保师的名字、法号",
+    9: "任務：以（道）来做出5组两个字的造句，比如：道心",
+    10: "任務：进来佛堂后会做的3件事情",
+    11: "任務：和团队一起自拍比爱心照片，线下：每个人的手一起组大爱心、线上：每个人的手构图成大爱心",
+    12: "任務：菩薩八覺有哪八覺",
+    13: "任務：我們開始獻香前要先請示誰",
+    14: "任務：獻香哪一個仙佛的名字有重複",
+    15: "任務：請問九蓮聖經目前出到第幾品",
+    16: "任務：一人說兩個平日獻香的佛號(要接下去）",
+    17: "任務：獻早香的時候，草香的順序",
+    18: "任務：每人说一个道场称谓。",
+    19: "任務：每人說兩個道場中，最常用到的詞。（比如說\"感謝慈悲“）",
+    20: "任務：每人説一個佛规",
+    21: "任務：九個長老院的名字 一人說一個",
+    22: "任務：一人說一個說出九達文德有設立佛堂的地區",
+    23: "任務：除了愛心，請各個地區的人員共同一起擺出一個造型代表要跟大家說的話 拍照呈現",
+    24: "任務：每個人說一個聖職前輩的法號和道職",
+    25: "任務：閉上眼睛深呼吸 3 秒！"
+};
+
+// 洗牌函式 (Fisher-Yates)
+function shuffleArray(array) {
+    const arr = [...array];
+    for (let i = arr.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [arr[i], arr[j]] = [arr[j], arr[i]];
+    }
+    return arr;
 }
 
 const rooms = {};
-// 關鍵：將計時器與進行狀態改為「每個玩家獨立」儲存
-// 結構會變成：playerActiveTasks[roomId][roleId] = { number, countdown, intervalId }
 const playerActiveTasks = {}; 
+// 👑 核心：存放每個玩家「專屬的號碼對應題目」
+const playerCustomDatabases = {}; 
 
 io.on('connection', (socket) => {
     
@@ -46,13 +56,13 @@ io.on('connection', (socket) => {
         const roomId = Math.floor(100000 + Math.random() * 900000).toString();
         rooms[roomId] = {
             gameStarted: false, 
-            hostSocketId: socket.id, // 記住關主大螢幕的通訊 ID
+            hostSocketId: socket.id,
             players: {},         
             playerBoards: {}     
         };
         for(let i=1; i<=24; i++) { rooms[roomId].playerBoards[i] = []; }
         playerActiveTasks[roomId] = {};
-
+        playerCustomDatabases[roomId] = {}; // 初始化房間題庫
         socket.join(roomId);
         socket.emit('gameCreated', roomId);
     });
@@ -67,7 +77,7 @@ io.on('connection', (socket) => {
     socket.on('joinGame', ({ roomId, playerName }) => {
         const room = rooms[roomId];
         if (!room) {
-            socket.emit('errorMsg', '找不到該房間號碼，請確認房號！');
+            socket.emit('errorMsg', '找不到該房間號碼！');
             return;
         }
 
@@ -90,48 +100,54 @@ io.on('connection', (socket) => {
         }
 
         if (!assignedRole) {
-            socket.emit('errorMsg', '該賓果房間 24 個點的位置已滿！');
+            socket.emit('errorMsg', '該房間位置已滿！');
             return;
+        }
+
+        // 👑 完美修復：當玩家成功加入時，後端立刻幫他把 25 題重新隨機洗牌派發！
+        if (!playerCustomDatabases[roomId][assignedRole]) {
+            playerCustomDatabases[roomId][assignedRole] = {};
+            const keys = Object.keys(rawTasks); // [1, 2, ..., 25]
+            const shuffledTaskIds = shuffleArray(keys); // 打亂後的題目 ID 順序
+            
+            // 將號碼 1~25 與隨機打亂後的題目重新綁定，做到每個人的號碼背後都是不同的題目！
+            for (let num = 1; num <= 25; num++) {
+                const randomTaskId = shuffledTaskIds[num - 1];
+                playerCustomDatabases[roomId][assignedRole][num] = `【點${assignedRole} × 號碼${num}】${rawTasks[randomTaskId]}`;
+            }
         }
 
         socket.join(roomId);
         socket.emit('joinedSuccess', { roomId, role: assignedRole, playerName, state: room });
-        
-        // 把當前所有人的進度同步給關主大螢幕
         io.to(roomId).emit('playerListUpdate', { players: room.players, playerBoards: room.playerBoards });
         
-        // 如果這個特定的玩家本來就有正在進行的計時任務，幫他接回去
         const myCurrentTask = playerActiveTasks[roomId][assignedRole];
         if(myCurrentTask) {
-            socket.emit('startQuestionSelf', { number: myCurrentTask.number, task: bingoDatabase[myCurrentTask.number][assignedRole], countdown: myCurrentTask.countdown });
+            const currentTaskText = playerCustomDatabases[roomId][assignedRole][myCurrentTask.number];
+            socket.emit('startQuestionSelf', { number: myCurrentTask.number, task: currentTaskText, countdown: myCurrentTask.countdown });
         }
     });
 
-    // 🎯 核心修正：海外玩家選號，走「完全獨立的個人頻道」
     socket.on('selectNumber', ({ roomId, num, roleId }) => {
         const room = rooms[roomId];
         if (!room || !room.gameStarted) return;
-        
-        // 如果該玩家自己目前已經有題目在倒數，不重複觸發
         if (playerActiveTasks[roomId][roleId]) return;
 
-        // 建立該玩家的獨立計時任務
         playerActiveTasks[roomId][roleId] = {
             number: num,
             countdown: 120,
             intervalId: null
         };
 
-        const taskText = bingoDatabase[num][roleId] || "此輪您無特別任務，請協助團隊完成。";
+        // 👑 抓取該玩家專屬洗牌後的盲盒題目
+        const taskText = playerCustomDatabases[roomId][roleId][num];
 
-        // ⚡ 關鍵核心：只發送給點按鈕的這名玩家自己！絕對不廣播給其他玩家！ ⚡
         socket.emit('startQuestionSelf', {
             number: num,
             task: taskText,
             countdown: 120
         });
 
-        // 📢 同步通知關主大螢幕：哪一個點點了幾號題，讓大螢幕可以顯示給台下看
         if (room.hostSocketId) {
             io.to(room.hostSocketId).emit('hostMonitorTask', {
                 roleId: roleId,
@@ -142,17 +158,14 @@ io.on('connection', (socket) => {
             });
         }
 
-        // 啟動專屬於該玩家的計時器
         playerActiveTasks[roomId][roleId].intervalId = setInterval(() => {
             if (!playerActiveTasks[roomId][roleId]) return;
             
             playerActiveTasks[roomId][roleId].countdown--;
             const currentCount = playerActiveTasks[roomId][roleId].countdown;
 
-            // 獨立同步回傳給該玩家的手機
             socket.emit('timerUpdateSelf', currentCount);
 
-            // 同步回傳給關主大螢幕
             if (room.hostSocketId) {
                 io.to(room.hostSocketId).emit('hostMonitorTimer', { roleId: roleId, countdown: currentCount });
             }
@@ -168,7 +181,6 @@ io.on('connection', (socket) => {
         }, 1000);
     });
 
-    // 玩家自己完成驗證：只結算他自己的分數，不影響他人！
     socket.on('verifyDoneSelf', ({ roomId, roleId }) => {
         const room = rooms[roomId];
         const task = playerActiveTasks[roomId][roleId];
@@ -177,18 +189,13 @@ io.on('connection', (socket) => {
         clearInterval(task.intervalId);
         const finalNum = task.number;
 
-        // 核心：將該號碼正式計入該玩家個人的賓果進度盤中！
         if (!room.playerBoards[roleId].includes(finalNum)) {
             room.playerBoards[roleId].push(finalNum);
         }
 
-        // 清除該玩家的獨立計時狀態
         delete playerActiveTasks[roomId][roleId];
-
-        // 通知該玩家過關，清除手機倒數畫面
         socket.emit('taskClearedSelf', finalNum);
 
-        // 通知關主大螢幕刷新「動態進度戰況牆」與號碼盤
         io.to(roomId).emit('playerListUpdate', { players: room.players, playerBoards: room.playerBoards });
         if (room.hostSocketId) {
             io.to(room.hostSocketId).emit('hostMonitorClear', roleId);
@@ -199,13 +206,13 @@ io.on('connection', (socket) => {
         const room = rooms[roomId];
         if (!room) return;
         
-        // 清除所有玩家的獨立計時器
         if (playerActiveTasks[roomId]) {
             for (let rId in playerActiveTasks[roomId]) {
                 clearInterval(playerActiveTasks[roomId][rId].intervalId);
             }
         }
         playerActiveTasks[roomId] = {};
+        playerCustomDatabases[roomId] = {}; // 清空自訂題庫
 
         rooms[roomId] = { 
             gameStarted: false,
@@ -220,5 +227,5 @@ io.on('connection', (socket) => {
 });
 
 http.listen(PORT, () => {
-    console.log(`真正各點獨立流轉的完美連線版伺服器已啟動！`);
+    console.log(`前後端全隨機盲盒大滿貫版伺服器運作中！`);
 });
