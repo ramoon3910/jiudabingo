@@ -6,7 +6,7 @@ const PORT = process.env.PORT || 3000;
 
 app.use(express.static(__dirname));
 
-// 1~25號 道場題目資料庫
+// 1~25號 道場核心題目資料庫
 const bingoDatabase = {};
 for (let i = 1; i <= 25; i++) {
     bingoDatabase[i] = {
@@ -48,11 +48,15 @@ io.on('connection', (socket) => {
         rooms[roomId] = {
             currentNumber: null,
             countdown: 120,
-            usedNumbers: [],
+            usedNumbers: [],     // 這裡記錄全場被選過、作廢的號碼
             isCounting: false,
             gameStarted: false, 
-            players: {}
+            players: {},         // 紀錄 roleId -> playerName
+            playerBoards: {}     // 核心關鍵：單獨記錄每個點完成的號碼陣列 { '1': [3, 5], '2': [3] }
         };
+        // 初始化 24 個點的進度庫
+        for(let i=1; i<=24; i++) { rooms[roomId].playerBoards[i] = []; }
+
         socket.join(roomId);
         socket.emit('gameCreated', roomId);
     });
@@ -64,55 +68,54 @@ io.on('connection', (socket) => {
         }
     });
 
-    socket.on('joinGame', ({ roomId, playerName, savedRole }) => {
+    socket.on('joinGame', ({ roomId, playerName }) => {
         const room = rooms[roomId];
         if (!room) {
-            socket.emit('errorMsg', '找不到該房間號碼！');
+            socket.emit('errorMsg', '找不到該房間號碼，請確認房號是否輸入正確！');
             return;
         }
 
+        // 檢查該玩家是否已經在房間裡（重複整理加入）
         let assignedRole = null;
-        if (savedRole && room.players[savedRole] === playerName) {
-            assignedRole = parseInt(savedRole);
-        } else {
-            for (let roleId in room.players) {
-                if (room.players[roleId] === playerName) {
-                    assignedRole = parseInt(roleId);
-                    break;
-                }
+        for (let roleId in room.players) {
+            if (room.players[roleId] === playerName) {
+                assignedRole = parseInt(roleId);
+                break;
             }
-            if (!assignedRole) {
-                for (let i = 1; i <= 24; i++) {
-                    if (!room.players[i]) {
-                        room.players[i] = playerName;
-                        assignedRole = i;
-                        break;
-                    }
+        }
+        
+        // 新玩家加入，分配未滿的位置
+        if (!assignedRole) {
+            for (let i = 1; i <= 24; i++) {
+                if (!room.players[i]) {
+                    room.players[i] = playerName;
+                    assignedRole = i;
+                    break;
                 }
             }
         }
 
         if (!assignedRole) {
-            socket.emit('errorMsg', '房間位置已滿！');
+            socket.emit('errorMsg', '抱歉，該賓果房間 24 個點的位置已滿！');
             return;
         }
 
         socket.join(roomId);
         socket.emit('joinedSuccess', { roomId, role: assignedRole, playerName, state: room });
-        io.to(roomId).emit('playerListUpdate', room.players);
+        io.to(roomId).emit('playerListUpdate', { players: room.players, playerBoards: room.playerBoards });
         
         if(room.isCounting) {
             socket.emit('startQuestion', { number: room.currentNumber, tasks: bingoDatabase[room.currentNumber], state: room });
         }
     });
 
-    // 嚴格攔截防搶防掐
+    // 🔴 徹底鎖死防搶機制：只要正在計時，任何人點號碼直接打回，絕不終止現有計時！
     socket.on('selectNumber', ({ roomId, num }) => {
         const room = rooms[roomId];
         if (!room || !room.gameStarted || room.usedNumbers.includes(num)) return;
         
         if (room.isCounting) {
-            socket.emit('errorMsg', '目前有其他隊伍正在任務中，請等他們完成再選號！');
+            socket.emit('errorMsg', `🛑 警告：全場正有隊伍在挑戰【${room.currentNumber}號題】，無法強行掐斷！請等倒數結束或點擊完成。`);
             return;
         }
 
@@ -134,23 +137,44 @@ io.on('connection', (socket) => {
             if (room.countdown <= 0) {
                 clearInterval(roomTimers[roomId]);
                 room.isCounting = false;
+                // 時間到，此號碼列入已用（全場劃掉）
+                if (!room.usedNumbers.includes(room.currentNumber)) {
+                    room.usedNumbers.push(room.currentNumber);
+                }
+                room.currentNumber = null;
                 io.to(roomId).emit('timeUp');
+                io.to(roomId).emit('syncState', room);
+                io.to(roomId).emit('playerListUpdate', { players: room.players, playerBoards: room.playerBoards });
             }
         }, 1000);
     });
 
-    // 點擊完成驗證，劃掉號碼並同步全域戰況
+    // 點擊完成驗證：將當前號碼塞入「所有有連線的點」的獨立進度中
     socket.on('verifyDone', (roomId) => {
         const room = rooms[roomId];
-        if (!room) return;
+        if (!room || !room.currentNumber) return;
         
         clearInterval(roomTimers[roomId]);
-        if (room.currentNumber && !room.usedNumbers.includes(room.currentNumber)) {
-            room.usedNumbers.push(room.currentNumber);
+        const finalNum = room.currentNumber;
+
+        // 全域號碼庫劃掉
+        if (!room.usedNumbers.includes(finalNum)) {
+            room.usedNumbers.push(finalNum);
         }
+
+        // 核心：所有在線玩家，只要他們在這個號碼有題目任務，就代表他們這題完成了，計入他們個人的賓果盤進度！
+        for (let i = 1; i <= 24; i++) {
+            if (room.players[i] && bingoDatabase[finalNum][i]) {
+                if (!room.playerBoards[i].includes(finalNum)) {
+                    room.playerBoards[i].push(finalNum);
+                }
+            }
+        }
+
         room.isCounting = false;
         room.currentNumber = null;
         io.to(roomId).emit('syncState', room); 
+        io.to(roomId).emit('playerListUpdate', { players: room.players, playerBoards: room.playerBoards });
     });
 
     socket.on('hostReset', (roomId) => {
@@ -163,13 +187,15 @@ io.on('connection', (socket) => {
             usedNumbers: [], 
             isCounting: false,
             gameStarted: false,
-            players: {} 
+            players: {},
+            playerBoards: {}
         };
+        for(let i=1; i<=24; i++) { rooms[roomId].playerBoards[i] = []; }
         io.to(roomId).emit('syncState', rooms[roomId]);
-        io.to(roomId).emit('playerListUpdate', {});
+        io.to(roomId).emit('playerListUpdate', { players: {}, playerBoards: rooms[roomId].playerBoards });
     });
 });
 
 http.listen(PORT, () => {
-    console.log(`Bingo 連線戰況追蹤版已啟動！`);
+    console.log(`跨國獨立進度追蹤系統已完美啟動！`);
 });
