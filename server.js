@@ -6,7 +6,7 @@ const PORT = process.env.PORT || 3000;
 
 app.use(express.static(__dirname));
 
-// 1~25號 道場核心題目資料庫
+// 1~25號 題目資料庫
 const bingoDatabase = {};
 for (let i = 1; i <= 25; i++) {
     bingoDatabase[i] = {
@@ -48,15 +48,13 @@ io.on('connection', (socket) => {
         rooms[roomId] = {
             currentNumber: null,
             countdown: 120,
-            usedNumbers: [],     // 這裡記錄全場被選過、作廢的號碼
+            usedNumbers: [],
             isCounting: false,
             gameStarted: false, 
-            players: {},         // 紀錄 roleId -> playerName
-            playerBoards: {}     // 核心關鍵：單獨記錄每個點完成的號碼陣列 { '1': [3, 5], '2': [3] }
+            players: {},         
+            playerBoards: {}     
         };
-        // 初始化 24 個點的進度庫
         for(let i=1; i<=24; i++) { rooms[roomId].playerBoards[i] = []; }
-
         socket.join(roomId);
         socket.emit('gameCreated', roomId);
     });
@@ -71,11 +69,10 @@ io.on('connection', (socket) => {
     socket.on('joinGame', ({ roomId, playerName }) => {
         const room = rooms[roomId];
         if (!room) {
-            socket.emit('errorMsg', '找不到該房間號碼，請確認房號是否輸入正確！');
+            socket.emit('errorMsg', '找不到該房間號碼，請確認房號！');
             return;
         }
 
-        // 檢查該玩家是否已經在房間裡（重複整理加入）
         let assignedRole = null;
         for (let roleId in room.players) {
             if (room.players[roleId] === playerName) {
@@ -84,7 +81,6 @@ io.on('connection', (socket) => {
             }
         }
         
-        // 新玩家加入，分配未滿的位置
         if (!assignedRole) {
             for (let i = 1; i <= 24; i++) {
                 if (!room.players[i]) {
@@ -96,7 +92,7 @@ io.on('connection', (socket) => {
         }
 
         if (!assignedRole) {
-            socket.emit('errorMsg', '抱歉，該賓果房間 24 個點的位置已滿！');
+            socket.emit('errorMsg', '該賓果房間 24 個點的位置已滿！');
             return;
         }
 
@@ -109,19 +105,22 @@ io.on('connection', (socket) => {
         }
     });
 
-    // 🔴 徹底鎖死防搶機制：只要正在計時，任何人點號碼直接打回，絕不終止現有計時！
+    // 🔒 核心重構：建立絕對不可動搖的「防掐斷保護鎖」
     socket.on('selectNumber', ({ roomId, num }) => {
         const room = rooms[roomId];
         if (!room || !room.gameStarted || room.usedNumbers.includes(num)) return;
         
+        // 【關鍵修復 1】：如果目前全域正在倒數（isCounting 為 true），直接回絕這次請求。
+        // 絕對不能往下執行，也絕對不可以碰到後面的 clearInterval，這樣正在進行的遊戲就不會被掐斷！
         if (room.isCounting) {
-            socket.emit('errorMsg', `🛑 警告：全場正有隊伍在挑戰【${room.currentNumber}號題】，無法強行掐斷！請等倒數結束或點擊完成。`);
+            socket.emit('errorMsg', `🛑 警告：全場正有隊伍在挑戰【${room.currentNumber}號題】，不允許中途干擾！請等當前任務完成。`);
             return;
         }
 
+        // 通過檢查，代表此時全場沒有人在計時，可以安全鎖定並開啟新題目
         room.currentNumber = num;
         room.countdown = 120;
-        room.isCounting = true;
+        room.isCounting = true; // 狀態上鎖！其他人此時點號碼都會在上面被 return 彈開
 
         io.to(roomId).emit('startQuestion', {
             number: num,
@@ -129,6 +128,7 @@ io.on('connection', (socket) => {
             state: room
         });
 
+        // 只有在確認沒人使用的安全狀態下，才重製屬於這個房間的獨立計時器
         clearInterval(roomTimers[roomId]);
         roomTimers[roomId] = setInterval(() => {
             room.countdown--;
@@ -136,8 +136,7 @@ io.on('connection', (socket) => {
 
             if (room.countdown <= 0) {
                 clearInterval(roomTimers[roomId]);
-                room.isCounting = false;
-                // 時間到，此號碼列入已用（全場劃掉）
+                room.isCounting = false; // 解鎖
                 if (!room.usedNumbers.includes(room.currentNumber)) {
                     room.usedNumbers.push(room.currentNumber);
                 }
@@ -149,7 +148,6 @@ io.on('connection', (socket) => {
         }, 1000);
     });
 
-    // 點擊完成驗證：將當前號碼塞入「所有有連線的點」的獨立進度中
     socket.on('verifyDone', (roomId) => {
         const room = rooms[roomId];
         if (!room || !room.currentNumber) return;
@@ -157,12 +155,10 @@ io.on('connection', (socket) => {
         clearInterval(roomTimers[roomId]);
         const finalNum = room.currentNumber;
 
-        // 全域號碼庫劃掉
         if (!room.usedNumbers.includes(finalNum)) {
             room.usedNumbers.push(finalNum);
         }
 
-        // 核心：所有在線玩家，只要他們在這個號碼有題目任務，就代表他們這題完成了，計入他們個人的賓果盤進度！
         for (let i = 1; i <= 24; i++) {
             if (room.players[i] && bingoDatabase[finalNum][i]) {
                 if (!room.playerBoards[i].includes(finalNum)) {
@@ -171,7 +167,7 @@ io.on('connection', (socket) => {
             }
         }
 
-        room.isCounting = false;
+        room.isCounting = false; // 開鎖
         room.currentNumber = null;
         io.to(roomId).emit('syncState', room); 
         io.to(roomId).emit('playerListUpdate', { players: room.players, playerBoards: room.playerBoards });
@@ -197,5 +193,5 @@ io.on('connection', (socket) => {
 });
 
 http.listen(PORT, () => {
-    console.log(`跨國獨立進度追蹤系統已完美啟動！`);
+    console.log(`終極防掐斷版伺服器已安全開跑！`);
 });
