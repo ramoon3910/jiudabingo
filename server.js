@@ -1,7 +1,10 @@
 const express = require('express');
 const app = express();
 const http = require('http').createServer(app);
-const io = require('socket.io')(http);
+const io = require('socket.io')(http, {
+    pingTimeout: 30000,   // 延長心跳超時，容忍短暫的網路波動
+    pingInterval: 10000
+});
 const PORT = process.env.PORT || 3000;
 
 app.use(express.static(__dirname));
@@ -35,7 +38,6 @@ const rawTasks = {
     25: "任務：閉上眼睛深呼吸 3 秒！"
 };
 
-// 洗牌函式 (Fisher-Yates)
 function shuffleArray(array) {
     const arr = [...array];
     for (let i = arr.length - 1; i > 0; i--) {
@@ -47,7 +49,6 @@ function shuffleArray(array) {
 
 const rooms = {};
 const playerActiveTasks = {}; 
-// 👑 核心：存放每個玩家「專屬的號碼對應題目」
 const playerCustomDatabases = {}; 
 
 io.on('connection', (socket) => {
@@ -62,7 +63,7 @@ io.on('connection', (socket) => {
         };
         for(let i=1; i<=24; i++) { rooms[roomId].playerBoards[i] = []; }
         playerActiveTasks[roomId] = {};
-        playerCustomDatabases[roomId] = {}; // 初始化房間題庫
+        playerCustomDatabases[roomId] = {}; 
         socket.join(roomId);
         socket.emit('gameCreated', roomId);
     });
@@ -104,16 +105,15 @@ io.on('connection', (socket) => {
             return;
         }
 
-        // 👑 完美修復：當玩家成功加入時，後端立刻幫他把 25 題重新隨機洗牌派發！
+        // 👑 修正1：移除 【點x × 號碼y】 的除錯字眼，只保留純題目內容，確保盲盒驚喜
         if (!playerCustomDatabases[roomId][assignedRole]) {
             playerCustomDatabases[roomId][assignedRole] = {};
-            const keys = Object.keys(rawTasks); // [1, 2, ..., 25]
-            const shuffledTaskIds = shuffleArray(keys); // 打亂後的題目 ID 順序
+            const keys = Object.keys(rawTasks); 
+            const shuffledTaskIds = shuffleArray(keys); 
             
-            // 將號碼 1~25 與隨機打亂後的題目重新綁定，做到每個人的號碼背後都是不同的題目！
             for (let num = 1; num <= 25; num++) {
                 const randomTaskId = shuffledTaskIds[num - 1];
-                playerCustomDatabases[roomId][assignedRole][num] = `【點${assignedRole} × 號碼${num}】${rawTasks[randomTaskId]}`;
+                playerCustomDatabases[roomId][assignedRole][num] = rawTasks[randomTaskId];
             }
         }
 
@@ -121,10 +121,15 @@ io.on('connection', (socket) => {
         socket.emit('joinedSuccess', { roomId, role: assignedRole, playerName, state: room });
         io.to(roomId).emit('playerListUpdate', { players: room.players, playerBoards: room.playerBoards });
         
+        // 👑 修正2（防斷線核心）：若玩家因為黑屏斷線再回來，檢查是否有執行中的任務，有就立刻推回去幫他恢復畫面
         const myCurrentTask = playerActiveTasks[roomId][assignedRole];
         if(myCurrentTask) {
             const currentTaskText = playerCustomDatabases[roomId][assignedRole][myCurrentTask.number];
-            socket.emit('startQuestionSelf', { number: myCurrentTask.number, task: currentTaskText, countdown: myCurrentTask.countdown });
+            socket.emit('startQuestionSelf', { 
+                number: myCurrentTask.number, 
+                task: currentTaskText, 
+                countdown: myCurrentTask.countdown 
+            });
         }
     });
 
@@ -139,7 +144,6 @@ io.on('connection', (socket) => {
             intervalId: null
         };
 
-        // 👑 抓取該玩家專屬洗牌後的盲盒題目
         const taskText = playerCustomDatabases[roomId][roleId][num];
 
         socket.emit('startQuestionSelf', {
@@ -212,7 +216,7 @@ io.on('connection', (socket) => {
             }
         }
         playerActiveTasks[roomId] = {};
-        playerCustomDatabases[roomId] = {}; // 清空自訂題庫
+        playerCustomDatabases[roomId] = {}; 
 
         rooms[roomId] = { 
             gameStarted: false,
@@ -227,5 +231,5 @@ io.on('connection', (socket) => {
 });
 
 http.listen(PORT, () => {
-    console.log(`前後端全隨機盲盒大滿貫版伺服器運作中！`);
+    console.log(`防斷線優化版盲盒 Bingo 伺服器已成功啟動！`);
 });
