@@ -11,24 +11,27 @@
         .screen { display: none; }
         .active { display: block; }
         
-        /* 賓果盤 */
         .grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; max-width: 500px; margin: 20px auto; }
-        .cell { padding: 20px 5px; font-size: 22px; background: #1e3c72; color: white; border: 2px solid #2a5298; border-radius: 10px; cursor: pointer; font-weight: bold; }
+        .cell { padding: 20px 5px; font-size: 22px; background: #1e3c72; color: white; border: 2px solid #2a5298; border-radius: 10px; cursor: pointer; font-weight: bold; height: 70px; }
         .cell:disabled { background: #ffc107 !important; color: #333 !important; border: 2px solid #ff9800; cursor: not-allowed; text-decoration: line-through; }
-        .cell:hover:not(:disabled) { background: #2a5298; }
 
-        /* 進度條強力顯眼外觀 */
-        .progress-container { width: 100%; max-width: 600px; background: #333; height: 35px; border-radius: 18px; margin: 15px auto; overflow: hidden; border: 3px solid #fff; box-shadow: 0 0 20px rgba(255, 255, 255, 0.2); display: block; }
-        .progress-bar { height: 100%; background: #e21b3c; width: 0%; transition: width 1s linear; }
-        .timer-text { font-size: 34px; font-weight: bold; color: #ffc107; text-shadow: 0 2px 5px rgba(0,0,0,0.8); margin-bottom: 5px; }
+        /* 倒數計時條（縮小至功能性） */
+        .progress-container { width: 100%; max-width: 600px; background: #333; height: 15px; border-radius: 8px; margin: 5px auto; overflow: hidden; border: 1px solid #fff; }
+        .progress-bar { height: 100%; background: #e21b3c; width: 0%; }
+        
+        /* 🏆 全場 Bingo 總遊戲進度條外觀（巨大、顯眼） 🏆 */
+        .game-progress-box { background: rgba(0, 0, 0, 0.4); border: 2px solid #00e676; border-radius: 15px; padding: 15px; max-width: 600px; margin: 15px auto; box-shadow: 0 0 15px rgba(0, 230, 118, 0.3); }
+        .game-progress-container { width: 100%; background: #444; height: 35px; border-radius: 18px; margin: 10px auto; overflow: hidden; border: 2px solid #fff; }
+        .game-progress-bar { height: 100%; background: #00e676; width: 0%; transition: width 0.5s ease; }
+        .game-status-text { font-size: 28px; font-weight: bold; color: #00e676; }
 
-        .task-box { background: white; color: #333; padding: 25px; border-radius: 15px; max-width: 550px; margin: 20px auto; text-align: left; box-shadow: 0 5px 15px rgba(0,0,0,0.5); }
+        .timer-text { font-size: 24px; font-weight: bold; color: #ffc107; margin-bottom: 5px; }
+        .task-box { background: white; color: #333; padding: 20px; border-radius: 15px; max-width: 550px; margin: 20px auto; text-align: left; box-shadow: 0 5px 15px rgba(0,0,0,0.5); }
         .btn-role { display: inline-block; width: 140px; margin: 8px; padding: 12px; font-size: 16px; border: none; border-radius: 8px; cursor: pointer; background: #26890c; color: white; font-weight: bold; }
         .btn-main { display: block; width: 80%; max-width: 300px; margin: 20px auto; padding: 20px; font-size: 22px; }
         
         #qrcode { background: white; padding: 15px; display: inline-block; border-radius: 10px; margin-top: 15px; }
         .input-box { padding: 12px; font-size: 18px; width: 250px; border-radius: 8px; border: none; text-align: center; margin-bottom: 15px; }
-        
         .info-panel { background: rgba(255,255,255,0.1); padding: 20px; border-radius: 15px; max-width: 550px; margin: 10px auto; font-size: 16px; text-align: left; }
         .dashboard { background: rgba(0,0,0,0.3); padding: 15px; border-radius: 10px; margin-top: 20px; font-size: 14px; display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; text-align: left; }
         .dash-item { padding: 5px; border-bottom: 1px solid #443566; }
@@ -39,7 +42,7 @@
     <div id="screenWelcome" class="screen active">
         <h1>🏆 九達 BINGO 🏆</h1>
         <p>請選擇您的身分開始遊戲：</p>
-        <button class="btn-role btn-main" style="background:#864cbf;" onclick="onCreateGameClick()">➕ Create Game (當關主)</button>
+        <button class="btn-role btn-main" style="background:#864cbf;" onclick="onCreateGameClick()">➕ Create Game (關主)</button>
         <button class="btn-role btn-main" style="background:#26890c;" onclick="showJoinScreen()">🚪 Join Game (點擊加入)</button>
     </div>
 
@@ -59,28 +62,36 @@
             <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 15px;">
                 <div>
                     <h2 style="color: #ffc107; margin: 0 0 10px 0;">房間號碼：<span id="roomDisplay" style="font-size: 32px;">------</span></h2>
-                    <strong>手機掃碼快速加入連結：</strong><br>
+                    <strong>手機加入連結：</strong><br>
                     <span id="lobbyLink" style="color:#00e676; word-break: break-all; font-size: 14px;"></span>
                 </div>
                 <div id="qrcode"></div>
             </div>
         </div>
 
-        <div id="syncTimerArea" style="margin: 20px auto; max-width: 600px;">
-            <div class="timer-text" id="timerText">🔒 等待關主點擊下方按鈕啟動開局...</div>
+        <div class="game-progress-box">
+            <div class="game-status-text" id="gameProgressText">🏁 總體進度：已解鎖，等待各點開題...</div>
+            <div id="bingoLinesText" style="font-size: 20px; color: #ffc107; font-weight: bold; margin-top: 5px;">🔥 目前全場已連成：0 條線</div>
+            <div class="game-progress-container">
+                <div class="game-progress-bar" id="gameProgressBar"></div>
+            </div>
+        </div>
+
+        <div id="syncTimerArea" style="margin: 10px auto; max-width: 600px;">
+            <div class="timer-text" id="timerText">🔒 系統鎖定中，待關主按鈕開局...</div>
             <div class="progress-container">
                 <div class="progress-bar" id="progressBar"></div>
             </div>
             
-            <div style="margin-top: 15px;">
-                <button id="btnHostStart" class="btn-role" style="background:#ff9800; width:100%; max-width:400px; padding: 18px; font-size: 22px; color:black; display: none;" onclick="hostStartGame()">👑 關主點此開局（點擊後解鎖全場）</button>
-                <button id="btnVerifyDone" class="btn-role" style="background:#00e676; width:100%; max-width:400px; padding: 15px; font-size: 18px; color:black; display: none;" onclick="clickVerifyDone()">✓ 點此完成驗證（全場同步劃掉號碼）</button>
+            <div style="margin-top: 10px;">
+                <button id="btnHostStart" class="btn-role" style="background:#ff9800; width:100%; max-width:400px; padding: 15px; font-size: 20px; color:black; display: none;" onclick="hostStartGame()">👑 關主點此開局（開局第一把）</button>
+                <button id="btnVerifyDone" class="btn-role" style="background:#00e676; width:100%; max-width:400px; padding: 12px; font-size: 18px; color:black; display: none;" onclick="clickVerifyDone()">✓ 點此完成驗證（全場同步劃掉號碼）</button>
             </div>
         </div>
 
         <div id="taskDisplay" class="task-box" style="display: none;">
-            <h3 style="margin-top:0; color:#46178f; font-size: 22px;" id="taskHeader">⚡ 任務進行中 ⚡</h3>
-            <div id="taskContent" style="font-size: 22px; font-weight: bold; line-height: 1.6; color:#111;"></div>
+            <h3 style="margin-top:0; color:#46178f;" id="taskHeader">⚡ 任務進行中 ⚡</h3>
+            <div id="taskContent" style="font-size: 18px; font-weight: bold; line-height: 1.5; color:#111;"></div>
         </div>
 
         <h3>【 中央賓果號碼盤 】</h3>
@@ -88,7 +99,7 @@
         <div class="grid" id="bingoGrid"></div>
 
         <div id="hostControls" style="display: none; margin-top: 30px; border-top:1px solid #555; padding-top:20px;">
-            <h3>📊 全局連線與進度狀態看板</h3>
+            <h3>📊 全局連線狀態看板</h3>
             <div class="dashboard" id="connectedPlayersDashboard">暫無連線數據</div>
             <button onclick="resetGame()" style="background:#777; color:white; margin-top:35px; padding: 8px 15px; border:none; border-radius:4px; cursor:pointer;">重置整場遊戲</button>
         </div>
@@ -101,24 +112,7 @@
         let myName = "";
         let isGameActivated = false;
 
-        // 防黑屏自動接回
-        window.onload = function() {
-            const cachedRoom = localStorage.getItem('bingo_room');
-            const cachedName = localStorage.getItem('bingo_name');
-            const cachedRole = localStorage.getItem('bingo_role');
-            
-            if(cachedRoom && cachedName && cachedRole) {
-                myRoomId = cachedRoom;
-                myName = cachedName;
-                myRole = cachedRole === 'host' ? 'host' : parseInt(cachedRole);
-                
-                if(myRole !== 'host') {
-                    socket.emit('joinGame', { roomId: myRoomId, playerName: myName, savedRole: cachedRole });
-                }
-            }
-        };
-
-        // 生成賓果盤
+        // 生成靜態按碼盤（絕不重複生成，徹底修復無法變黃的 Bug）
         const grid = document.getElementById('bingoGrid');
         for (let i = 1; i <= 25; i++) {
             const btn = document.createElement('button');
@@ -127,7 +121,7 @@
             btn.innerText = i;
             btn.onclick = () => {
                 if (!isGameActivated) {
-                    alert("遊戲尚未由關主解鎖開局，目前無法選號！");
+                    alert("遊戲尚未由關主解鎖開局！");
                     return;
                 }
                 socket.emit('selectNumber', { roomId: myRoomId, num: i });
@@ -135,36 +129,30 @@
             grid.appendChild(btn);
         }
 
+        window.onload = function() {
+            const cachedRoom = localStorage.getItem('bingo_room');
+            const cachedName = localStorage.getItem('bingo_name');
+            const cachedRole = localStorage.getItem('bingo_role');
+            if(cachedRoom && cachedName && cachedRole) {
+                myRoomId = cachedRoom; myName = cachedName; myRole = cachedRole === 'host' ? 'host' : parseInt(cachedRole);
+                if(myRole !== 'host') socket.emit('joinGame', { roomId: myRoomId, playerName: myName, savedRole: cachedRole });
+            }
+        };
+
         const urlParams = new URLSearchParams(window.location.search);
         const urlRoom = urlParams.get('room');
-        if(urlRoom) {
-            showJoinScreen();
-            document.getElementById('inputRoomId').value = urlRoom;
-        }
-
-        function showJoinScreen() {
-            document.getElementById('screenWelcome').classList.remove('active');
-            document.getElementById('screenJoinForm').classList.add('active');
-        }
-        function backToWelcome() {
-            document.getElementById('screenJoinForm').classList.remove('active');
-            document.getElementById('screenWelcome').classList.add('active');
-        }
-
+        if(urlRoom) { showJoinScreen(); document.getElementById('inputRoomId').value = urlRoom; }
+        function showJoinScreen() { document.getElementById('screenWelcome').classList.remove('active'); document.getElementById('screenJoinForm').classList.add('active'); }
+        function backToWelcome() { document.getElementById('screenJoinForm').classList.remove('active'); document.getElementById('screenWelcome').classList.add('active'); }
         function onCreateGameClick() { socket.emit('createGame'); }
 
         socket.on('gameCreated', (roomId) => {
-            myRoomId = roomId;
-            myRole = 'host';
-            localStorage.setItem('bingo_room', roomId);
-            localStorage.setItem('bingo_role', 'host');
-            
+            myRoomId = roomId; myRole = 'host';
+            localStorage.setItem('bingo_room', roomId); localStorage.setItem('bingo_role', 'host');
             initGameBoard();
-            
             const inviteLink = `${window.location.origin}${window.location.pathname}?room=${roomId}`;
             document.getElementById('lobbyLink').innerText = inviteLink;
             document.getElementById('roomDisplay').innerText = roomId;
-            
             document.getElementById('qrcode').innerHTML = ''; 
             new QRCode(document.getElementById('qrcode'), { text: inviteLink, width: 110, height: 110 });
         });
@@ -172,19 +160,14 @@
         function submitJoinGame() {
             const roomId = document.getElementById('inputRoomId').value;
             const name = document.getElementById('inputPlayerName').value.trim();
-            if(!roomId || !name) { alert('請填寫完整房號與您的名字！'); return; }
-            myRoomId = roomId;
-            myName = name;
+            if(!roomId || !name) { alert('請填寫完整房號與名字！'); return; }
+            myRoomId = roomId; myName = name;
             socket.emit('joinGame', { roomId: roomId, playerName: name });
         }
 
         socket.on('joinedSuccess', ({ roomId, role, playerName, state }) => {
-            myRole = role;
-            myName = playerName;
-            localStorage.setItem('bingo_room', roomId);
-            localStorage.setItem('bingo_name', playerName);
-            localStorage.setItem('bingo_role', role);
-            
+            myRole = role; myName = playerName;
+            localStorage.setItem('bingo_room', roomId); localStorage.setItem('bingo_name', playerName); localStorage.setItem('bingo_role', role);
             document.getElementById('screenJoinForm').classList.remove('active');
             initGameBoard();
             syncBoardState(state);
@@ -195,12 +178,11 @@
         function initGameBoard() {
             document.getElementById('screenWelcome').classList.remove('active');
             document.getElementById('screenGame').classList.add('active');
-            
             if (myRole === 'host') {
                 document.getElementById('identityTitle').innerText = "👑 九達道場 - 賓果全局大螢幕控制盤";
                 document.getElementById('roomInfoPanel').style.display = 'block';
                 document.getElementById('hostControls').style.display = 'block';
-                document.getElementById('btnHostStart').style.display = 'inline-block'; // 顯示啟動開局大按鈕
+                document.getElementById('btnHostStart').style.display = 'inline-block'; 
             } else {
                 document.getElementById('identityTitle').innerText = `📱 ${myName} (代表點 ${myRole})`;
                 document.getElementById('roomInfoPanel').style.display = 'none';
@@ -209,16 +191,12 @@
             }
         }
 
-        // 關主發送開局訊號
-        function hostStartGame() {
-            socket.emit('hostStartGame', myRoomId);
-        }
+        function hostStartGame() { socket.emit('hostStartGame', myRoomId); }
 
-        // 全場接收開局通知（解鎖號碼盤）
         socket.on('gameStartedSignal', (state) => {
             isGameActivated = true;
             document.getElementById('btnHostStart').style.display = 'none';
-            document.getElementById('gameHint').innerText = "🟢 賓果連線已開局！請海外點隊長點擊數字盤進行選號開題。";
+            document.getElementById('gameHint').innerText = "🟢 已開局！海外玩家點擊數字即可選號開題。";
             document.getElementById('timerText').innerText = "等待各點點擊號碼盤數字開題...";
             syncBoardState(state);
         });
@@ -228,8 +206,8 @@
                 const dashboard = document.getElementById('connectedPlayersDashboard');
                 let html = '';
                 for (let i = 1; i <= 24; i++) {
-                    const pName = players[i] ? `<span style="color:#00e676;font-weight:bold;">● 已連線 (${players[i]})</span>` : `<span style="color:#aaa;">○ 離線 / 待分配</span>`;
-                    html += `<div class="dash-item"><strong>點 ${i} 位置：</strong> ${pName}</div>`;
+                    const pName = players[i] ? `<span style="color:#00e676;font-weight:bold;">● 已連線 (${players[i]})</span>` : `<span style="color:#aaa;">○ 離線</span>`;
+                    html += `<div class="dash-item"><strong>點 ${i}：</strong> ${pName}</div>`;
                 }
                 dashboard.innerHTML = html;
             }
@@ -237,40 +215,60 @@
 
         socket.on('syncState', (state) => { syncBoardState(state); });
 
+        // 計算目前連成幾條線的演算法
+        function calculateBingoLines(usedNumbers) {
+            let lines = 0;
+            const wins = [
+                [1,2,3,4,5], [6,7,8,9,10], [11,12,13,14,15], [16,17,18,19,20], [21,22,23,24,25], // 橫軌
+                [1,6,11,16,21], [2,7,12,17,22], [3,8,13,18,23], [4,9,14,19,24], [5,10,15,20,25], // 縱軌
+                [1,7,13,19,25], [5,9,13,17,21] // 斜軌
+            ];
+            wins.forEach(combo => {
+                if (combo.every(num => usedNumbers.includes(num))) lines++;
+            });
+            return lines;
+        }
+
+        // 核心修正：正確改變狀態，並計算全場進度條
         function syncBoardState(state) {
-            updateGrid(state.usedNumbers);
+            // 1. 保證劃掉已被玩的數字變黃（徹底修復上版 Bug）
+            for (let i = 1; i <= 25; i++) {
+                const btn = document.getElementById(`cell-${i}`);
+                if (btn) btn.disabled = state.usedNumbers.includes(i);
+            }
             
             if (state.gameStarted) {
                 isGameActivated = true;
                 document.getElementById('btnHostStart').style.display = 'none';
-                document.getElementById('gameHint').innerText = "🟢 賓果連線已開局！請海外點隊長點擊數字盤進行選號開題。";
+                document.getElementById('gameHint').innerText = "🟢 已開局！海外玩家點擊數字即可選號開題。";
             }
+
+            // 2. 📊 【更新全場 Bingo 總進度條與數據】 📊
+            const totalUsed = state.usedNumbers.length;
+            document.getElementById('gameProgressText').innerText = `🏁 總體進度：全場已挑戰完成 ${totalUsed} 題 / 剩餘 ${25 - totalUsed} 題`;
+            const totalLines = calculateBingoLines(state.usedNumbers);
+            document.getElementById('bingoLinesText').innerText = `🔥 目前全場已連成：${totalLines} 條線 ${totalLines >= 3 ? '🎉 (已達成3條連線！)' : ''}`;
+            document.getElementById('gameProgressBar').style.width = (totalUsed / 25 * 100) + '%';
 
             if (!state.isCounting) {
                 document.getElementById('btnVerifyDone').style.display = 'none';
                 document.getElementById('taskDisplay').style.display = 'none';
                 document.getElementById('progressBar').style.width = '0%';
-                if (isGameActivated) {
-                    document.getElementById('timerText').innerText = "等待各點點擊號碼盤數字開題...";
-                }
+                if (isGameActivated) document.getElementById('timerText').innerText = "等待各點點擊號碼盤數字開題...";
             }
         }
 
-        // 核心同步開題監聽：無論是誰點選，關主端與所有玩家端都會同時強行觸發以下介面切換！
         socket.on('startQuestion', ({ number, tasks, state }) => {
-            updateGrid(state.usedNumbers);
-            document.getElementById('btnVerifyDone').style.display = 'inline-block'; // 彈出完成劃掉按鈕
+            syncBoardState(state);
+            document.getElementById('btnVerifyDone').style.display = 'inline-block'; 
             document.getElementById('timerText').innerText = `🎯 正在進行第 ${number} 號題目倒數！`;
-            document.getElementById('taskDisplay').style.display = 'block'; // 強制展開任務框
+            document.getElementById('taskDisplay').style.display = 'block'; 
             
-            // 關鍵修正：讓關主大螢幕同步顯示當前被選取的題目資訊與進度條！
             if (myRole === 'host') {
                 document.getElementById('taskHeader').innerText = `📋 大螢幕全局看板：第 ${number} 號題目進行中`;
-                
-                // 動態生成大螢幕摘要名單，讓關主看清每個人現在要答什麼
-                let hostSummaryHtml = `<p style="color:#26890c; font-weight:bold; margin-bottom:10px;">請全場助理協助就位驗證各點任務：</p><ul style="padding-left:20px; font-size:16px;">`;
+                let hostSummaryHtml = `<ul style="padding-left:20px; font-size:15px; grid-template-columns: 1fr 1fr; display: grid; gap: 5px;">`;
                 for(let k=1; k<=24; k++) {
-                    if(tasks[k]) hostSummaryHtml += `<li style="margin-bottom:4px;"><strong>點 ${k}：</strong> ${tasks[k]}</li>`;
+                    if(tasks[k]) hostSummaryHtml += `<li><strong>點 ${k}：</strong> ${tasks[k]}</li>`;
                 }
                 hostSummaryHtml += `</ul>`;
                 document.getElementById('taskContent').innerHTML = hostSummaryHtml;
@@ -280,37 +278,23 @@
             }
         });
 
-        // 進度條高精度每秒同步更新
         socket.on('timerUpdate', (seconds) => {
             document.getElementById('timerText').innerText = `⏳ 剩餘時間：${seconds} 秒`;
             const percent = (seconds / 120) * 100;
-            document.getElementById('progressBar').style.width = percent + '%';
-            if (seconds <= 15) document.getElementById('progressBar').style.background = '#f29f05';
-            else document.getElementById('progressBar').style.background = '#e21b3c';
+            const pBar = document.getElementById('progressBar');
+            if (pBar) {
+                pBar.style.width = percent + '%';
+                pBar.style.background = seconds <= 15 ? '#f29f05' : '#e21b3c';
+            }
         });
 
         socket.on('timeUp', () => {
-            document.getElementById('timerText').innerText = `⏰ 時間到！請停止動作，等待各點助理驗證！`;
-            document.getElementById('progressBar').style.width = '0%';
+            document.getElementById('timerText').innerText = `⏰ 時間到！請停止動作，等待助理驗證！`;
+            const pBar = document.getElementById('progressBar'); if (pBar) pBar.style.width = '0%';
         });
 
         function clickVerifyDone() { socket.emit('verifyDone', myRoomId); }
-        function resetGame() { 
-            if(confirm('警告：這將會清空所有使用的號碼與玩家連線紀錄，確定重置？')) {
-                localStorage.clear();
-                socket.emit('hostReset', myRoomId); 
-            }
-        }
-
-        function updateGrid(usedNumbers) {
-            for (let i = 1; i <= 25; i++) {
-                const btn = document.createElement('button');
-                const existingBtn = document.getElementById(`cell-${i}`);
-                if (existingBtn) {
-                    existingBtn.disabled = usedNumbers.includes(i);
-                }
-            }
-        }
+        function resetGame() { if(confirm('確定重置整場遊戲嗎？')) { localStorage.clear(); socket.emit('hostReset', myRoomId); } }
     </script>
 </body>
 </html>
