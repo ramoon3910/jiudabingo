@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>跨國多人同步 - Bingo 派對房間版</title>
+    <title>九達BINGO</title>
     <script src="/socket.io/socket.io.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
     <style>
@@ -27,7 +27,10 @@
         
         /* QR code 容器樣式 */
         #qrcode { background: white; padding: 15px; display: inline-block; border-radius: 10px; margin-top: 15px; }
-        .input-box { padding: 12px; font-size: 18px; width: 200px; border-radius: 8px; border: none; text-align: center; margin-bottom: 15px; }
+        .input-box { padding: 12px; font-size: 18px; width: 250px; border-radius: 8px; border: none; text-align: center; margin-bottom: 15px; }
+        
+        /* 關主頂部投影面板 */
+        .info-panel { background: rgba(255,255,255,0.1); padding: 20px; border-radius: 15px; max-width: 550px; margin: 10px auto; font-size: 16px; text-align: left; box-shadow: inset 0 0 10px rgba(255,255,255,0.1); }
     </style>
 </head>
 <body>
@@ -42,29 +45,31 @@
     <div id="screenJoinForm" class="screen">
         <h2>🚪 加入賓果房間</h2>
         <input type="number" id="inputRoomId" class="input-box" placeholder="請輸入 6 位數房號"><br>
-        <p>請選擇您代表的點（玩家編號）：</p>
-        <div style="max-width: 500px; margin: 0 auto;" id="playerButtons">
-            </div>
+        <input type="text" id="inputPlayerName" class="input-box" placeholder="請輸入您的名字 / 地區"><br>
+        <button class="btn-role btn-main" style="background:#26890c; margin-top:10px;" onclick="submitJoinGame()">確認加入遊戲</button>
         <br>
         <button onclick="backToWelcome()" style="background:grey; color:white; padding:10px; border:none; border-radius:5px; cursor:pointer;">返回首頁</button>
     </div>
 
-    <div id="screenHostLobby" class="screen">
-        <h1>🏰 賓果房間已建立！</h1>
-        <h2 style="color: #ffc107;">房間號碼 (Room ID)：<span id="lobbyRoomId" style="font-size:40px;">------</span></h2>
-        <p>請分享以下資訊給跨國的 10 個點加入：</p>
-        <p><strong>專屬邀請連結：</strong><br><span id="lobbyLink" style="color:#00e676; word-break: break-all;"></span></p>
-        <div id="qrcode"></div>
-        <br><br>
-        <button class="btn-role" style="background:#26890c; width:80%; max-width:300px;" onclick="enterHostGame()">進入賓果主控盤 ➔</button>
-    </div>
-
     <div id="screenGame" class="screen">
         <h2 id="identityTitle">我的身分</h2>
-        <p id="roomDisplay" style="color: #aaa;"></p>
         
+        <div class="info-panel" id="roomInfoPanel" style="display: none;">
+            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 15px;">
+                <div>
+                    <h2 style="color: #ffc107; margin: 0 0 10px 0;">房間號碼：<span id="roomDisplay" style="font-size: 32px;">------</span></h2>
+                    <strong>專屬邀請連結：</strong><br>
+                    <span id="lobbyLink" style="color:#00e676; word-break: break-all; font-size: 14px;"></span>
+                </div>
+                <div id="qrcode"></div>
+            </div>
+            <div id="hostPlayerList" style="margin-top: 15px; border-top: 1px solid rgba(255,255,255,0.2); padding-top: 10px;">
+                <strong>已連線點位名單：</strong> <span id="connectedPlayers" style="color: #ffc107;">暫無玩家連線</span>
+            </div>
+        </div>
+
         <div id="syncTimerArea">
-            <div class="timer-text" id="timerText">等待關主開題...</div>
+            <div class="timer-text" id="timerText">等待小隊長選號並由關主開題...</div>
             <div class="progress-container" id="progressContainer">
                 <div class="progress-bar" id="progressBar"></div>
             </div>
@@ -72,14 +77,14 @@
 
         <div id="taskDisplay" class="task-box" style="display: none;">
             <h3 style="margin-top:0; color:#46178f;" id="taskHeader">⚡ 您的專屬任務 ⚡</h3>
-            <p id="taskContent" style="font-size: 20px; font-weight: bold;"></p>
+            <p id="taskContent" style="font-size: 20px; font-weight: bold; line-height: 1.5;"></p>
         </div>
 
         <h3>【 中央賓果號碼盤 】</h3>
         <div class="grid" id="bingoGrid"></div>
 
         <div id="hostControls" style="display: none; margin-top: 30px;">
-            <button class="btn-role" style="background:#26890c; width:100%; max-width:400px;" onclick="verifyDone()">✓ 助理確認完成（螢光筆劃掉號碼）</button><br>
+            <button class="btn-role" style="background:#26890c; width:100%; max-width:400px; padding: 15px; font-size: 18px;" onclick="verifyDone()">✓ 助理確認完成（螢光筆劃掉號碼）</button><br>
             <button onclick="resetGame()" style="background:grey; color:white; margin-top:20px; padding: 5px 10px; border:none; border-radius:4px;">重置整場遊戲</button>
         </div>
     </div>
@@ -88,12 +93,7 @@
         const socket = io();
         let myRole = null;
         let myRoomId = null;
-
-        // 初始化加入頁面的點1~點10按鈕
-        const playerButtonsDiv = document.getElementById('playerButtons');
-        for(let i=1; i<=10; i++) {
-            playerButtonsDiv.innerHTML += `<button class="btn-role" onclick="submitJoinGame(${i})">點 ${i}</button>`;
-        }
+        let myName = "";
 
         // 初始化 1~25 賓果盤按鈕
         const grid = document.getElementById('bingoGrid');
@@ -108,14 +108,12 @@
             grid.appendChild(btn);
         }
 
-        // 檢查網址是否有自帶房號與點號 (例如 ?room=123456&role=3)
+        // 自動檢查 URL 參數（方便點連結一鍵帶入房號）
         const urlParams = new URLSearchParams(window.location.search);
         const urlRoom = urlParams.get('room');
-        const urlRole = urlParams.get('role');
-        if(urlRoom && urlRole) {
-            myRoomId = urlRoom;
-            myRole = urlRole === 'host' ? 'host' : parseInt(urlRole);
-            socket.emit('joinGame', { roomId: myRoomId, role: myRole });
+        if(urlRoom) {
+            showJoinScreen();
+            document.getElementById('inputRoomId').value = urlRoom;
         }
 
         // --- 路由切換控制 ---
@@ -128,50 +126,46 @@
             document.getElementById('screenWelcome').classList.add('active');
         }
 
-        // --- 點擊 Create Game ---
+        // --- 關主點擊 Create Game ---
         function onCreateGameClick() {
             socket.emit('createGame');
         }
 
-        // 伺服器回傳房間建立成功
+        // 伺服器回傳房間建立成功（直接切換進入主盤面並生成 QR 碼）
         socket.on('gameCreated', (roomId) => {
             myRoomId = roomId;
             myRole = 'host';
             
-            document.getElementById('screenWelcome').classList.remove('active');
-            document.getElementById('screenHostLobby').classList.add('active');
-            document.getElementById('lobbyRoomId').innerText = roomId;
+            initGameBoard();
             
-            // 自動算出這台主機的目前網址，並組合出邀請連結
+            // 建立並展示大螢幕投影資訊
             const inviteLink = `${window.location.origin}${window.location.pathname}?room=${roomId}`;
             document.getElementById('lobbyLink').innerText = inviteLink;
+            document.getElementById('roomDisplay').innerText = roomId;
+            document.getElementById('roomInfoPanel').style.style = 'block';
             
-            // 動態生成 QR Code
-            document.getElementById('qrcode').innerHTML = ''; // 清空舊的
+            // 動態生成大螢幕專用 QR Code
+            document.getElementById('qrcode').innerHTML = ''; 
             new QRCode(document.getElementById('qrcode'), {
                 text: inviteLink,
-                width: 180,
-                height: 180
+                width: 110,
+                height: 110
             });
         });
 
-        // 進入關主主控盤面
-        function enterHostGame() {
-            document.getElementById('screenHostLobby').classList.remove('active');
-            initGameBoard();
-        }
-
-        // --- 點擊 Join Game 提交 ---
-        function submitJoinGame(roleNum) {
+        // --- 玩家提交名字加入遊戲 ---
+        function submitJoinGame() {
             const roomId = document.getElementById('inputRoomId').value;
-            if(!roomId) { alert('請輸入房號！'); return; }
+            const name = document.getElementById('inputPlayerName').value.trim();
+            if(!roomId || !name) { alert('請填寫完整房號與您的名字！'); return; }
             myRoomId = roomId;
-            myRole = roleNum;
-            socket.emit('joinGame', { roomId: roomId, role: roleNum });
+            myName = name;
+            socket.emit('joinGame', { roomId: roomId, playerName: name });
         }
 
         // 成功加入房間
-        socket.on('joinedSuccess', ({ roomId, role, state }) => {
+        socket.on('joinedSuccess', ({ roomId, role, playerName, state }) => {
+            myRole = role;
             document.getElementById('screenJoinForm').classList.remove('active');
             initGameBoard();
             syncBoardState(state);
@@ -182,15 +176,29 @@
 
         // 初始化遊戲盤面介面
         function initGameBoard() {
+            document.getElementById('screenWelcome').classList.remove('active');
             document.getElementById('screenGame').classList.add('active');
-            document.getElementById('roomDisplay').innerText = `房間號碼：${myRoomId}`;
+            
             if (myRole === 'host') {
-                document.getElementById('identityTitle').innerText = "👑 關主主控畫面";
+                document.getElementById('identityTitle').innerText = "👑 關主大螢幕控制盤";
+                document.getElementById('roomInfoPanel').style.display = 'block'; // 只有關主看得見大螢幕資訊
                 document.getElementById('hostControls').style.display = 'block';
             } else {
-                document.getElementById('identityTitle').innerText = `📱 您是：點 ${myRole} 玩家端`;
+                document.getElementById('identityTitle').innerText = `📱 您好 ${myName}！您目前代表：【點 ${myRole}】`;
+                document.getElementById('roomInfoPanel').style.display = 'none';  // 玩家端隱藏投影區
             }
         }
+
+        // 實時名單更新（顯示在關主的大螢幕上）
+        socket.on('playerListUpdate', (players) => {
+            if (myRole === 'host') {
+                let listText = [];
+                for (let roleId in players) {
+                    listText.push(`[點${roleId}]: ${players[roleId]}`);
+                }
+                document.getElementById('connectedPlayers').innerText = listText.join('、') || "暫無玩家連線";
+            }
+        });
 
         // --- 核心即時同步邏輯 ---
         socket.on('syncState', (state) => { syncBoardState(state); });
@@ -212,18 +220,20 @@
             
             if (myRole === 'host') {
                 document.getElementById('taskHeader').innerText = `📋 關主視察：正在進行 ${number} 號任務`;
-                document.getElementById('taskContent').innerHTML = `請各國助理就位驗證 10 個點的任務。`;
+                document.getElementById('taskContent').innerHTML = `請各點就位。助理準備驗證任務。`;
             } else {
                 document.getElementById('taskHeader').innerText = `⚡ 點 ${myRole} 的專屬任務 ⚡`;
+                // 這裡會自動抓取當前玩家被分配到點位編號的精準題目
                 document.getElementById('taskContent').innerText = tasks[myRole] || "此輪您無特別任務。";
             }
         });
 
         socket.on('timerUpdate', (seconds) => {
             document.getElementById('timerText').innerText = `⏳ 剩餘時間：${seconds} 秒`;
-            const percent = (seconds / 30) * 100;
+            // 核心修改：除數改為與後端完全同步的 120 秒，防止進度條爆開
+            const percent = (seconds / 120) * 100;
             document.getElementById('progressBar').style.width = percent + '%';
-            if (seconds <= 5) document.getElementById('progressBar').style.background = '#f29f05';
+            if (seconds <= 10) document.getElementById('progressBar').style.background = '#f29f05';
             else document.getElementById('progressBar').style.background = '#e21b3c';
         });
 
