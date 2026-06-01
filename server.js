@@ -6,7 +6,7 @@ const PORT = process.env.PORT || 3000;
 
 app.use(express.static(__dirname));
 
-// 1~25號 核心題目資料庫
+// 1~25號 核心題目資料庫（完美保留）
 const bingoDatabase = {};
 for (let i = 1; i <= 25; i++) {
     bingoDatabase[i] = {
@@ -51,10 +51,19 @@ io.on('connection', (socket) => {
             countdown: 120,
             usedNumbers: [],
             isCounting: false,
-            players: {} // 記錄角色與名字對應
+            gameStarted: false, // 新增：控制整場遊戲是否正式由關主按鈕啟動
+            players: {}
         };
         socket.join(roomId);
         socket.emit('gameCreated', roomId);
+    });
+
+    // 關主點擊「開始遊戲」解鎖號碼盤
+    socket.on('hostStartGame', (roomId) => {
+        if (rooms[roomId]) {
+            rooms[roomId].gameStarted = true;
+            io.to(roomId).emit('gameStartedSignal', rooms[roomId]);
+        }
     });
 
     // 2. 玩家加入遊戲 (支援手機黑屏斷線重連機制)
@@ -67,18 +76,15 @@ io.on('connection', (socket) => {
 
         let assignedRole = null;
 
-        // 【重連機制】如果玩家帶有之前暫存的點位，且名字對得上，直接無縫接回
         if (savedRole && room.players[savedRole] === playerName) {
             assignedRole = parseInt(savedRole);
         } else {
-            // 否則，檢查名字是否已在房內
             for (let roleId in room.players) {
                 if (room.players[roleId] === playerName) {
                     assignedRole = parseInt(roleId);
                     break;
                 }
             }
-            // 如果是全新加入，自動依序分發 1 ~ 24 空位
             if (!assignedRole) {
                 for (let i = 1; i <= 24; i++) {
                     if (!room.players[i]) {
@@ -99,16 +105,15 @@ io.on('connection', (socket) => {
         socket.emit('joinedSuccess', { roomId, role: assignedRole, playerName, state: room });
         io.to(roomId).emit('playerListUpdate', room.players);
         
-        // 剛重連進來，若正在開題中，同步給該玩家最新狀態
         if(room.isCounting) {
             socket.emit('startQuestion', { number: room.currentNumber, tasks: bingoDatabase[room.currentNumber], state: room });
         }
     });
 
-    // 3. 任何人選號開題 (修改：玩家也能觸發點號)
+    // 3. 任何人選號開題 (必須在遊戲已啟動、且沒在計時的狀態下)
     socket.on('selectNumber', ({ roomId, num }) => {
         const room = rooms[roomId];
-        if (!room || room.usedNumbers.includes(num) || room.isCounting) return;
+        if (!room || !room.gameStarted || room.usedNumbers.includes(num) || room.isCounting) return;
 
         clearInterval(roomTimers[roomId]);
         room.currentNumber = num;
@@ -133,7 +138,7 @@ io.on('connection', (socket) => {
         }, 1000);
     });
 
-    // 4. 關主或玩家點擊驗證完成 (由口頭跟助理確認後，任何人按都可以結算劃掉)
+    // 4. 驗證完成，劃掉號碼
     socket.on('verifyDone', (roomId) => {
         const room = rooms[roomId];
         if (!room) return;
@@ -157,6 +162,7 @@ io.on('connection', (socket) => {
             countdown: 120, 
             usedNumbers: [], 
             isCounting: false,
+            gameStarted: false,
             players: {} 
         };
         io.to(roomId).emit('syncState', rooms[roomId]);
@@ -165,5 +171,5 @@ io.on('connection', (socket) => {
 });
 
 http.listen(PORT, () => {
-    console.log(`跨國玩家自主版賓果系統已在 Port ${PORT} 啟動！`);
+    console.log(`跨國大權限版賓果系統已在 Port ${PORT} 啟動！`);
 });
