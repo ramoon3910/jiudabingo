@@ -37,7 +37,6 @@
         .input-box { padding: 12px; font-size: 18px; width: 250px; border-radius: 8px; border: none; text-align: center; margin-bottom: 15px; background: white; color: black; }
         .info-panel { background: rgba(255,255,255,0.1); padding: 20px; border-radius: 15px; max-width: 550px; margin: 10px auto; font-size: 16px; text-align: left; }
         
-        /* 斷線提示橫幅 */
         #disconnectBanner { display: none; background: #e21b3c; color: white; padding: 10px; font-weight: bold; position: fixed; top: 0; left: 0; width: 100%; z-index: 9999; box-shadow: 0 3px 10px rgba(0,0,0,0.5); }
     </style>
 </head>
@@ -46,7 +45,7 @@
     <div id="disconnectBanner">⚠️ 網路連線中斷 / 手機休眠中，正在自動重新連線與恢復進度...</div>
 
     <div id="screenWelcome" class="screen active">
-        <h1>🏆 歡迎來到 九達 BINGO 🏆</h1>
+        <h1>🏆 歡迎來到九達 BINGO 🏆</h1>
         <p>請選擇您的身分開始遊戲：</p>
         <button class="btn-role btn-main" style="background:#864cbf;" onclick="onCreateGameClick()">➕ Create Game (關主模式)</button>
         <button class="btn-role btn-main" style="background:#26890c;" onclick="showJoinScreen()">🚪 Join Game (點擊加入)</button>
@@ -81,23 +80,22 @@
                 <div class="progress-bar" id="progressBar"></div>
             </div>
             <div style="margin-top: 15px;">
-                <button id="btnVerifyDone" class="btn-role" style="background:#00e676; width:100%; max-width:400px; padding: 12px; font-size: 18px; color:black;" onclick="clickVerifyDone()">✓ 點擊已完成任務</button>
+                <button id="btnVerifyDone" class="btn-role" style="background:#00e676; width:100%; max-width:400px; padding: 12px; font-size: 18px; color:black;" onclick="clickVerifyDone()">✓ 我已完成任務（點此計入我的 Bingo 進度）</button>
             </div>
         </div>
         
-        <button id="btnHostStart" class="btn-role" style="background:#ff9800; width:100%; max-width:400px; padding: 15px; font-size: 20px; color:black; display: none; margin: 20px auto;" onclick="hostStartGame()">👑 點擊開始遊戲</button>
+        <button id="btnHostStart" class="btn-role" style="background:#ff9800; width:100%; max-width:400px; padding: 15px; font-size: 20px; color:black; display: none; margin: 20px auto;" onclick="hostStartGame()">👑 關主點此開局（啟動海外手機盤）</button>
 
         <div class="leaderboard-box" id="globalLeaderboardBox" style="display: none;">
-            <div class="leaderboard-title">📊 各點戰況與即時進度</div>
+            <div class="leaderboard-title">📊 各點戰況與即時進度牆</div>
             <div class="leaderboard-grid" id="leaderboardGridContent"></div>
         </div>
 
         <div id="taskDisplay" class="task-box" style="display: none;">
-            <h3 style="margin-top:0; color:#46178f;" id="taskHeader">⚡ 我的專屬任務 ⚡</h3>
-            <div id="taskContent" style="font-size: 18px; font-weight: bold; line-height: 1.5; color:#111;"></div>
+            <div id="taskContent" style="font-size: 20px; font-weight: bold; line-height: 1.6; color:#111;"></div>
         </div>
 
-        <h3 id="gridTitle">【 BINGO 號碼盤 】</h3>
+        <h3 id="gridTitle">【 我的BINGO號碼盤 】</h3>
         <p id="gameHint" style="color:#ffc107; font-size:14px; margin:0; font-weight:bold;">⚠️ 系統鎖定中，待關主按鈕開局後即可點擊選號！</p>
         <div class="grid" id="bingoGrid"></div>
 
@@ -114,20 +112,17 @@
         let isGameActivated = false;
         let globalBoardsData = {};
 
-        // 👑 修正2防斷線機制：當手機從黑屏甦醒過來時，自動觸發 Socket 重連並請求後端同步狀態
         socket.on('disconnect', () => {
             document.getElementById('disconnectBanner').style.display = 'block';
         });
 
         socket.on('connect', () => {
             document.getElementById('disconnectBanner').style.display = 'none';
-            // 如果原本就已經有登入資料（代表是黑屏醒來後的斷線重連），自動重新向後端發送登入請求恢復進度
             if (myRoomId && myName && myRole !== 'host') {
                 socket.emit('joinGame', { roomId: myRoomId, playerName: myName });
             }
         });
 
-        // 前端號碼盤打亂保持不變
         let numbersArray = [];
         for (let i = 1; i <= 25; i++) { numbersArray.push(i); }
         for (let i = numbersArray.length - 1; i > 0; i--) {
@@ -191,7 +186,7 @@
             document.getElementById('screenGame').classList.add('active');
             
             if (myRole === 'host') {
-                document.getElementById('identityTitle').innerText = "👑 九達道場 - 賓果全局大螢幕控制盤";
+                document.getElementById('identityTitle').innerText = "👑 九達 BINGO 全局大螢幕";
                 document.getElementById('roomInfoPanel').style.display = 'block';
                 document.getElementById('hostControls').style.display = 'block';
                 document.getElementById('btnHostStart').style.display = 'block'; 
@@ -291,8 +286,7 @@
         socket.on('startQuestionSelf', ({ number, task, countdown }) => {
             document.getElementById('syncTimerArea').style.display = 'block';
             document.getElementById('taskDisplay').style.display = 'block';
-            // 👑 修正1：美化前端文字，只顯示「幾號任務」，後面就是純乾淨題目
-            document.getElementById('taskHeader').innerText = `🎯 正在挑戰第 ${number} 號數字的盲盒任務！`;
+            // 👑 修正1：只保留純題目，乾乾淨淨
             document.getElementById('taskContent').innerText = task;
             document.getElementById('timerText').innerText = `⏳ 剩餘時間：${countdown} 秒`;
             document.getElementById('progressBar').style.width = (countdown / 120 * 100) + '%';
@@ -311,7 +305,8 @@
         socket.on('taskClearedSelf', (finalNum) => {
             document.getElementById('syncTimerArea').style.display = 'none';
             document.getElementById('taskDisplay').style.display = 'none';
-            alert(`恭喜完成第 ${finalNum} 號任務！成功劃掉一格！`);
+            // 👑 修正2：彈框只顯示最純粹的「恭喜完成！」
+            alert(`恭喜完成！`);
         });
 
         function clickVerifyDone() { socket.emit('verifyDoneSelf', { roomId: myRoomId, roleId: myRole }); }
@@ -319,7 +314,7 @@
         socket.on('hostMonitorTask', ({ roleId, playerName, number, task, countdown }) => {
             const subtext = document.getElementById(`monitor-subtext-${roleId}`);
             const card = document.getElementById(`host-player-card-${roleId}`);
-            if (subtext) subtext.innerHTML = `<b style="color:#ff9800;">🔥 挑戰【${number}號題】: ${task.substring(0,18)}...</b>`;
+            if (subtext) subtext.innerHTML = `<b style="color:#ff9800;">🔥 挑戰任務: ${task.substring(0,18)}...</b>`;
             if (card) card.style.background = "rgba(255, 152, 0, 0.15)";
         });
 
